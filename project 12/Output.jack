@@ -1,0 +1,378 @@
+// This file is part of nand2tetris, as taught in The Hebrew University, and
+// was written by Aviv Yaish. It is an extension to the specifications given
+// [here](https://www.nand2tetris.org) (Shimon Schocken and Noam Nisan, 2017),
+// as allowed by the Creative Common Attribution-NonCommercial-ShareAlike 3.0
+// Unported [License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
+// File name: projects/12/Output.jack
+
+/**
+ * A library of functions for writing text on the screen.
+ * The Hack physical screen consists of 512 rows of 256 pixels each.
+ * The library uses a fixed font, in which each character is displayed 
+ * within a frame which is 11 pixels high (including 1 pixel for inter-line 
+ * spacing) and 8 pixels wide (including 2 pixels for inter-character spacing).
+ * The resulting grid accommodates 23 rows (indexed 0..22, top to bottom)
+ * of 64 characters each (indexed 0..63, left to right). The top left 
+ * character position on the screen is indexed (0,0). A cursor, implemented
+ * as a small filled square, indicates where the next character will be displayed.
+ */
+class Output {
+
+    // Character map for displaying characters
+    static int screen_base, mod_16, turn_off_first, turn_off_second;
+    static Array charMaps; 
+    static int cursor_row, cursor_column, row_length, column_length, last_row, last_column;
+
+    static char newline, backspace;
+
+    /** Initializes the screen, and locates the cursor at the screen's top-left. */
+    function void init() {
+        do Screen.init();
+        do Output.initMap();
+        let screen_base = 16384;
+
+        let cursor_row = 0;
+        let cursor_column = 0;
+        let last_column = 63;
+        let last_row = 22;
+        let row_length = 8;
+        let column_length = 11;
+
+        let mod_16 = 15;            //0000000000001111
+        let turn_off_first = -256;   ////0000000011111111
+        let turn_off_second = 255; //1111111100000000
+
+
+        let newline = String.newLine() ;
+        let backspace = String.backSpace();
+        return;
+    }
+
+    // Initializes the character map array
+    function void initMap() {
+        var int i;
+    
+        let charMaps = Array.new(127);
+        
+        // Black square, used for displaying non-printable characters.
+        do Output.create(0,63,63,63,63,63,63,63,63,63,0,0);
+
+        // Assigns the bitmap for each character in the charachter set.
+        // The first parameter is the character index, the next 11 numbers
+        // are the values of each row in the frame that represents this character.
+        do Output.create(32,0,0,0,0,0,0,0,0,0,0,0);          //
+        do Output.create(33,12,30,30,30,12,12,0,12,12,0,0);  // !
+        do Output.create(34,54,54,20,0,0,0,0,0,0,0,0);       // "
+        do Output.create(35,0,18,18,63,18,18,63,18,18,0,0);  // #
+        do Output.create(36,12,30,51,3,30,48,51,30,12,12,0); // $
+        do Output.create(37,0,0,35,51,24,12,6,51,49,0,0);    // %
+        do Output.create(38,12,30,30,12,54,27,27,27,54,0,0); // &
+        do Output.create(39,12,12,6,0,0,0,0,0,0,0,0);        // '
+        do Output.create(40,24,12,6,6,6,6,6,12,24,0,0);      // (
+        do Output.create(41,6,12,24,24,24,24,24,12,6,0,0);   // )
+        do Output.create(42,0,0,0,51,30,63,30,51,0,0,0);     // *
+        do Output.create(43,0,0,0,12,12,63,12,12,0,0,0);     // +
+        do Output.create(44,0,0,0,0,0,0,0,12,12,6,0);        // ,
+        do Output.create(45,0,0,0,0,0,63,0,0,0,0,0);         // -
+        do Output.create(46,0,0,0,0,0,0,0,12,12,0,0);        // .    
+        do Output.create(47,0,0,32,48,24,12,6,3,1,0,0);      // /
+        
+        do Output.create(48,12,30,51,51,51,51,51,30,12,0,0); // 0
+        do Output.create(49,12,14,15,12,12,12,12,12,63,0,0); // 1
+        do Output.create(50,30,51,48,24,12,6,3,51,63,0,0);   // 2
+        do Output.create(51,30,51,48,48,28,48,48,51,30,0,0); // 3
+        do Output.create(52,16,24,28,26,25,63,24,24,60,0,0); // 4
+        do Output.create(53,63,3,3,31,48,48,48,51,30,0,0);   // 5
+        do Output.create(54,28,6,3,3,31,51,51,51,30,0,0);    // 6
+        do Output.create(55,63,49,48,48,24,12,12,12,12,0,0); // 7
+        do Output.create(56,30,51,51,51,30,51,51,51,30,0,0); // 8
+        do Output.create(57,30,51,51,51,62,48,48,24,14,0,0); // 9
+        
+        do Output.create(58,0,0,12,12,0,0,12,12,0,0,0);      // :
+        do Output.create(59,0,0,12,12,0,0,12,12,6,0,0);      // ;
+        do Output.create(60,0,0,24,12,6,3,6,12,24,0,0);      // <
+        do Output.create(61,0,0,0,63,0,0,63,0,0,0,0);        // =
+        do Output.create(62,0,0,3,6,12,24,12,6,3,0,0);       // >
+        do Output.create(64,30,51,51,59,59,59,27,3,30,0,0);  // @
+        do Output.create(63,30,51,51,24,12,12,0,12,12,0,0);  // ?
+
+        do Output.create(65,12,30,51,51,63,51,51,51,51,0,0);  // A ** TO BE FILLED **
+        do Output.create(66,31,51,51,51,31,51,51,51,31,0,0); // B
+        do Output.create(67,28,54,35,3,3,3,35,54,28,0,0);    // C
+        do Output.create(68,15,27,51,51,51,51,51,27,15,0,0); // D
+        do Output.create(69,63,51,35,11,15,11,35,51,63,0,0); // E
+        do Output.create(70,63,51,35,11,15,11,3,3,3,0,0);    // F
+        do Output.create(71,28,54,35,3,59,51,51,54,44,0,0);  // G
+        do Output.create(72,51,51,51,51,63,51,51,51,51,0,0); // H
+        do Output.create(73,30,12,12,12,12,12,12,12,30,0,0); // I
+        do Output.create(74,60,24,24,24,24,24,27,27,14,0,0); // J
+        do Output.create(75,51,51,51,27,15,27,51,51,51,0,0); // K
+        do Output.create(76,3,3,3,3,3,3,35,51,63,0,0);       // L
+        do Output.create(77,33,51,63,63,51,51,51,51,51,0,0); // M
+        do Output.create(78,51,51,55,55,63,59,59,51,51,0,0); // N
+        do Output.create(79,30,51,51,51,51,51,51,51,30,0,0); // O
+        do Output.create(80,31,51,51,51,31,3,3,3,3,0,0);     // P
+        do Output.create(81,30,51,51,51,51,51,63,59,30,48,0);// Q
+        do Output.create(82,31,51,51,51,31,27,51,51,51,0,0); // R
+        do Output.create(83,30,51,51,6,28,48,51,51,30,0,0);  // S
+        do Output.create(84,63,63,45,12,12,12,12,12,30,0,0); // T
+        do Output.create(85,51,51,51,51,51,51,51,51,30,0,0); // U
+        do Output.create(86,51,51,51,51,51,30,30,12,12,0,0); // V
+        do Output.create(87,51,51,51,51,51,63,63,63,18,0,0); // W
+        do Output.create(88,51,51,30,30,12,30,30,51,51,0,0); // X
+        do Output.create(89,51,51,51,51,30,12,12,12,30,0,0); // Y
+        do Output.create(90,63,51,49,24,12,6,35,51,63,0,0);  // Z
+
+        do Output.create(91,30,6,6,6,6,6,6,6,30,0,0);          // [
+        do Output.create(92,0,0,1,3,6,12,24,48,32,0,0);        // \
+        do Output.create(93,30,24,24,24,24,24,24,24,30,0,0);   // ]
+        do Output.create(94,8,28,54,0,0,0,0,0,0,0,0);          // ^
+        do Output.create(95,0,0,0,0,0,0,0,0,0,63,0);           // _
+        do Output.create(96,6,12,24,0,0,0,0,0,0,0,0);          // `
+
+        do Output.create(97,0,0,0,14,24,30,27,27,54,0,0);      // a
+        do Output.create(98,3,3,3,15,27,51,51,51,30,0,0);      // b
+        do Output.create(99,0,0,0,30,51,3,3,51,30,0,0);        // c
+        do Output.create(100,48,48,48,60,54,51,51,51,30,0,0);  // d
+        do Output.create(101,0,0,0,30,51,63,3,51,30,0,0);      // e
+        do Output.create(102,28,54,38,6,15,6,6,6,15,0,0);      // f
+        do Output.create(103,0,0,30,51,51,51,62,48,51,30,0);   // g
+        do Output.create(104,3,3,3,27,55,51,51,51,51,0,0);     // h
+        do Output.create(105,12,12,0,14,12,12,12,12,30,0,0);   // i
+        do Output.create(106,48,48,0,56,48,48,48,48,51,30,0);  // j
+        do Output.create(107,3,3,3,51,27,15,15,27,51,0,0);     // k
+        do Output.create(108,14,12,12,12,12,12,12,12,30,0,0);  // l
+        do Output.create(109,0,0,0,29,63,43,43,43,43,0,0);     // m
+        do Output.create(110,0,0,0,29,51,51,51,51,51,0,0);     // n
+        do Output.create(111,0,0,0,30,51,51,51,51,30,0,0);     // o
+        do Output.create(112,0,0,0,30,51,51,51,31,3,3,0);      // p
+        do Output.create(113,0,0,0,30,51,51,51,62,48,48,0);    // q
+        do Output.create(114,0,0,0,29,55,51,3,3,7,0,0);        // r
+        do Output.create(115,0,0,0,30,51,6,24,51,30,0,0);      // s
+        do Output.create(116,4,6,6,15,6,6,6,54,28,0,0);        // t
+        do Output.create(117,0,0,0,27,27,27,27,27,54,0,0);     // u
+        do Output.create(118,0,0,0,51,51,51,51,30,12,0,0);     // v
+        do Output.create(119,0,0,0,51,51,51,63,63,18,0,0);     // w
+        do Output.create(120,0,0,0,51,30,12,12,30,51,0,0);     // x
+        do Output.create(121,0,0,0,51,51,51,62,48,24,15,0);    // y
+        do Output.create(122,0,0,0,63,27,12,6,51,63,0,0);      // z
+        
+        do Output.create(123,56,12,12,12,7,12,12,12,56,0,0);   // {
+        do Output.create(124,12,12,12,12,12,12,12,12,12,0,0);  // |
+        do Output.create(125,7,12,12,12,56,12,12,12,7,0,0);    // }
+        do Output.create(126,38,45,25,0,0,0,0,0,0,0,0);        // ~
+
+	return;
+    }
+
+    // Creates the character map array of the given character index, using the given values.
+    function void create(int index, int a, int b, int c, int d, int e,
+                         int f, int g, int h, int i, int j, int k) {
+	var Array map;
+
+	let map = Array.new(11);
+        let charMaps[index] = map;
+
+        let map[0] = a;
+        let map[1] = b;
+        let map[2] = c;
+        let map[3] = d;
+        let map[4] = e;
+        let map[5] = f;
+        let map[6] = g;
+        let map[7] = h;
+        let map[8] = i;
+        let map[9] = j;
+        let map[10] = k;
+
+        return;
+    }
+    
+    function void printHelper(char c){
+        var Array bit_map;
+        var int i, register_index, register_input, cur_register_value;
+        var int x_coord, y_coord, x_mod_16;
+
+        let bit_map = Output.getMap(c);
+        let x_coord = Output.getCursorX();
+        let y_coord = Output.getCursorY();
+        let x_mod_16 = x_coord & mod_16;
+        let i = 0;
+
+        while(i < 11){ //for each of the 11 rows in the character block
+            // Calculate register index:
+            let register_index = screen_base + ^^^^^(y_coord+i) + ####(x_coord);
+            //Get current register value:
+            
+            let cur_register_value = Memory.peek(register_index);
+            //Get bitmap value for input:
+            let register_input = bit_map[i];
+
+            if (x_mod_16 = 0){ //Placing character in first half (8 LEAST significant bits) of screen
+                //Turn off first 8 (least significat) bits:
+                let cur_register_value = cur_register_value & turn_off_first;
+                //Insert bitmap value into first half of register:
+                let register_input = register_input | cur_register_value;
+            }
+            else { //Placing character in second half (8 MOST significant bits) of screen
+                //Turn off last 8 (most significat) bits:
+                let cur_register_value = cur_register_value & turn_off_second; 
+                //Insert bitmap value into second half of register:
+                let register_input = ^^^^^^^^(register_input); //Left-shift the relevant bits (8 least significant) to be the most-significat 8.
+                let register_input = register_input | cur_register_value;
+            }
+
+            do Memory.poke(register_index, register_input);
+            let i = i + 1;
+        }
+        return;
+    }
+    
+    // let top_left_x = Output.getCursorX();      //left
+    // let top_left_y = Output.getCursorY();    //top
+    // let bottom_right_x = top_left_x + 7;  //right
+    // let bottom_right_y = top_left_y + 10;   //bottom
+
+    function int getCursorX(){
+        return cursor_column * 8;
+    }
+
+    function int getCursorY(){
+        return cursor_row * 11;
+    }
+    
+    // Returns the character map (array of size 11) of the given character.
+    // If the given character is invalid or non-printable, returns the
+    // character map of a black square.
+    function Array getMap(char c) {
+        if ((c < 32) | (c > 126)) {
+            let c = 0;
+        }
+        return charMaps[c];
+    }
+
+    /** Moves the cursor to the j-th column of the i-th row,
+     *  and erases the character displayed there. */
+    function void moveCursor(int i, int j) {
+        let cursor_row = i;
+        let cursor_column = j;
+        do Output.clearChar();
+        return;
+    }
+
+    /** Displays the given character at the cursor location,
+     *  and advances the cursor one column forward. */
+    function void printChar(char c) {
+        // Check for special cases - new line or backspace:
+        if (c = newline){ //Move cursor to the beginning of the next row:
+            do Output.println();
+            return;
+        }
+        if (c = backspace){ //move 1 column backwards, or if at first row - go back to end of last row.
+            do Output.backSpace();
+            return;
+        }
+        // Not a special case - draw the character, then move the cursor:
+        do Output.printHelper(c); //draw the character
+        if( cursor_column < last_column ){
+            do Output.moveCursor(cursor_row, cursor_column + 1);
+        }
+        else { // Already in last column - move to next row
+            do Output.println();
+        }
+        return;
+        
+    }
+
+
+    /** displays the given string starting at the cursor location,
+     *  and advances the cursor appropriately. */
+    function void printString(String s) {
+        var char cur_char;
+        var int s_length, i;
+        
+        let i = 0;
+        let s_length = s.length();
+
+        while (i < s_length){
+            do Output.printChar(s.charAt(i));
+            let i = i + 1;
+        }
+        
+        return;
+    }
+
+    /** Displays the given integer starting at the cursor location,
+     *  and advances the cursor appropriately. */
+    function void printInt(int i) {
+        var String str;
+        var int length_needed, temp_i;
+
+        if(i < 0){
+            do Output.printChar(45); //Print '-' for negative number.
+            let i = -i; //Now we just need to print i.
+        }
+
+        let length_needed = 1;
+        let temp_i = i;
+        while(10 < temp_i){
+            let temp_i = temp_i / 10;
+            let length_needed = length_needed + 1;
+        }
+        let str = String.new(length_needed);
+        do str.setInt(i);
+        do Output.printString(str);
+
+        do str.dispose();
+        return;
+    }
+
+    /** Advances the cursor to the beginning of the next line. */
+    function void println() {
+        if( ~(cursor_row = last_row) ) {
+            do Output.moveCursor(cursor_row + 1,0);
+        }
+        else{ //last row - go back to first row.
+            do Output.moveCursor(0,0);
+        }
+        return;
+    }
+
+    /** Moves the cursor one column back (which also clears the char there) */
+    function void backSpace() {
+        if( ~(cursor_column = 0) ){ // Not at first column
+            do Output.moveCursor(cursor_row, cursor_column - 1);
+        }
+        else { //Cursor at first column, move it to the previous row's end
+            if( ~(cursor_row = 0) ){ //Not at first row
+                do Output.moveCursor(cursor_row-1, last_column);
+            }
+            else{ //At first row - move to last row instead.
+                do Output.moveCursor(last_row, last_column);
+            }
+        }
+        return;
+    }
+    
+    function void clearChar() { //Clears the frame the cursor currently occupies
+        do Output.printHelper(32); // "Draws" a whitespace on the current cursor location.
+        return;
+    }
+
+    function void test() {
+        var int i;
+
+        do Screen.drawRectangle(0, 0, 511, 30);
+        // do Output.moveCursor(0,0);
+        // let i = 1;
+        // while(i < (64) ){
+        //     do Output.moveCursor(0,i);
+        //     let i = i + 1;
+        // }
+        return;
+    }
+
+    
+    
+
+}

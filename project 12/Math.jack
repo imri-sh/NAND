@@ -1,0 +1,179 @@
+// This file is part of nand2tetris, as taught in The Hebrew University, and
+// was written by Aviv Yaish. It is an extension to the specifications given
+// [here](https://www.nand2tetris.org) (Shimon Schocken and Noam Nisan, 2017),
+// as allowed by the Creative Common Attribution-NonCommercial-ShareAlike 3.0
+// Unported [License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
+
+/**
+ * A library of commonly used mathematical functions.
+ * Note: Jack compilers implement multiplication and division using OS method calls.
+ */
+class Math {
+        static int division_2qy;
+        static Array powers_of_two;
+
+        /** Initializes the library. */
+        function void init() {
+            let powers_of_two = Array.new(16);
+            let powers_of_two[0] = 1;               //0000000000000001
+            let powers_of_two[1] = 2;               //0000000000000010
+            let powers_of_two[2] = 4;               //0000000000000100
+            let powers_of_two[3] = 8;               //0000000000001000
+            let powers_of_two[4] = 16;              //0000000000010000
+            let powers_of_two[5] = 32;              //0000000000100000
+            let powers_of_two[6] = 64;              //0000000001000000
+            let powers_of_two[7] = 128;             //0000000010000000
+            let powers_of_two[8] = 256;             //0000000100000000
+            let powers_of_two[9] = 512;             //0000001000000000
+            let powers_of_two[10] = 1024;           //0000010000000000
+            let powers_of_two[11] = 2048;           //0000100000000000
+            let powers_of_two[12] = 4096;           //0001000000000000
+            let powers_of_two[13] = 8192;           //0010000000000000
+            let powers_of_two[14] = 16384;          //0100000000000000
+            let powers_of_two[15] = 16384 + 16384;  //1000000000000000
+            return;
+        }
+
+        /** Returns the absolute value of x. */
+        function int abs(int x) {
+            if(x > -1) {
+                return x;
+            }
+            return -x;
+        }
+
+        /** 
+         * Returns the product of x and y. 
+         * When a Jack compiler detects the multiplication operator '*' in the 
+         * program's code, it handles it by invoking this method. In other words,
+         * the Jack expressions x*y and multiply(x,y) return the same value.
+         */
+        function int multiply(int x, int y) {
+            // Pseudocode:
+            // 1. let sum = 0
+            // 2. let shiftedx = x
+            // 3. for i = 0 ... n-1 do
+            // 4.   if ((i-th bit of y) == 1)
+            // 5.      let sum = sum + shiftedx
+            // 6.   let shiftedx = 2*shiftedx
+            // 7. return sum
+            var int sum, shiftedx, i, ith_bit_isolated;
+
+            let sum = 0;
+            let shiftedx = x;
+            let i = 0;
+
+            while(i < 16) {
+                // Get i-th bit of y:
+                let ith_bit_isolated = y & powers_of_two[i]; //isolate i-th bit (every other bit - 0)
+                if (~(ith_bit_isolated = 0)){ // if 0, it means the i-th bit is "off" - no need to add
+                    let sum = sum + shiftedx;
+                }
+                let shiftedx = ^shiftedx;
+                let i = i+1;
+            }
+            return sum;
+        }
+
+        /** 
+         * Returns the integer part of x/y.
+         * When a Jack compiler detects the multiplication operator '/' in the 
+         * program's code, it handles it by invoking this method. In other words,
+         * the Jack expressions x/y and divide(x,y) return the same value.
+         */
+        function int divide(int x, int y) {
+            // This should be implemented without using multiplication.
+            // Hint: updating the value of 2*q*y in the "if" statement requires
+            // at most a single addition operator at every recursion step.
+            // Pseudocode:
+            // 1. if (y > x) return 0
+            // 2. let q = divide(x, 2*y)
+            // 3. if ((x - 2*q*y) < y)
+            // 4.   return 2*q
+            // 5. else
+            // 6.   return 2*q + 1
+            var int q;
+            var boolean x_pos, y_pos, flip_result;
+
+            let division_2qy = 0;
+            //Handle negative input:
+            let x_pos = false;
+            let y_pos = false;
+            if (x > 0){let x_pos = true;}
+            if (y > 0){let y_pos = true;}
+            let flip_result = false;
+            if ( (x_pos & ~y_pos) | (~x_pos & y_pos) ){let flip_result = true;}
+            let x = Math.abs(x);
+            let y = Math.abs(y);
+
+            if (flip_result){
+                return -Math.divisionHelper(x, y);
+            }
+            return Math.divisionHelper(x, y);
+        }
+
+        function int divisionHelper(int x, int y){
+            /* x,y must be positive here!
+            */
+            var int q;
+            if ( (y > x) | (y < 0) ) { //Handles base case and overflow on y (in which case y>=2**16>x - division result is 0)
+                return 0;
+            }
+            
+            let q = Math.divisionHelper(x, ^y); 
+            if((x - division_2qy) < y){
+                return ^q;
+            }
+            let division_2qy = division_2qy + y; //update division_2qy for the caller
+            //remainder is greater than y - add 1 to result.
+            return ^q + 1;
+            
+        }
+
+        function boolean isEven(int x){
+            var int shiftedx;
+            let shiftedx = ^x; //shift right
+            let shiftedx = #x; //shift left
+            return shiftedx = x;
+        }
+
+        /** Returns the integer part of the square root of x. */
+        function int sqrt(int x) {
+            // This should be implemented without using multiplication or division.
+            // Pseudocode (where '**' is the mathematical power function):
+            // 1. let y = 0
+            // 2. for j = (n/2 - 1) ... 0 do
+            // 3.   if ((y + 2**j)**2 <= x) then let y = y + 2**j
+            // 4. return y
+            var int y,j, value, value_squared;
+
+            let y = 0;
+            let j = 7;
+
+            while(~(j < 0)){
+                let value = y + powers_of_two[j];
+                let value_squared = value * value;
+                if ( ~(value_squared > x) & (value_squared > 0)) {
+                    let y = value;
+                }   
+                let j = j-1;
+            }
+            return y;
+        }
+
+        /** Returns the greater number. */
+        function int max(int a, int b) {
+            if(a > b){
+                return a;
+            }
+            return b;
+        }
+
+        /** Returns the smaller number. */
+        function int min(int a, int b) {
+            if(b > a){
+                return a;
+            }
+            return b;
+        }
+}

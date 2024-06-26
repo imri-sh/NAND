@@ -1,0 +1,43 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/01/DMux8Way.hdl
+
+/**
+ * 8-way demultiplexor:
+ * {a, b, c, d, e, f, g, h} = {in, 0, 0, 0, 0, 0, 0, 0} if sel == 000
+ *                            {0, in, 0, 0, 0, 0, 0, 0} if sel == 001
+ *                            etc.
+ *                            {0, 0, 0, 0, 0, 0, 0, in} if sel == 111
+ */
+
+CHIP DMux8Way {
+    IN in, sel[3];
+    OUT a, b, c, d, e, f, g, h;
+
+    PARTS:
+        //First split by a,b,c,d (0XX) / e,f,g,h (1XX)
+        DMux(in=in, sel=sel[2], a=outputABCD, b=outputEFGH);
+
+            //Then split by a,b(00X)/c,d(01X):
+            DMux(in=outputABCD, sel=sel[1], a=outputAB, b=outputCD);
+
+                //split by a(sel[0]=0)/b(sel[0]=1):
+                DMux(in=outputAB, sel=sel[0], a=a, b=b);
+
+                //split by c(sel[0]=0)/d(sel[0]=1):
+                DMux(in=outputCD, sel=sel[0], a=c, b=d);
+
+
+            //And for the other branch - split by e,f(10X)/g,h(11X):
+            DMux(in=outputEFGH, sel=sel[1], a=outputEF, b=outputGH);
+
+                //split by e(sel[0]=0)/f(sel[0]=1):
+                DMux(in=outputEF, sel=sel[0], a=e, b=f);
+
+                //split by g(sel[0]=0)/h(sel[0]=1):
+                DMux(in=outputGH, sel=sel[0], a=g, b=h);
+
+        
+    
+}

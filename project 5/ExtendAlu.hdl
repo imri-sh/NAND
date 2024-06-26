@@ -1,0 +1,62 @@
+// This file is part of nand2tetris, as taught in The Hebrew University, and
+// was written by Aviv Yaish. It is an extension to the specifications given
+// [here](https://www.nand2tetris.org) (Shimon Schocken and Noam Nisan, 2017),
+// as allowed by the Creative Common Attribution-NonCommercial-ShareAlike 3.0
+// Unported [License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
+
+
+// The ExtendAlu chip is an extension of the standard ALU which also supports
+// shift operations.
+// The inputs of the extended ALU are instruction[9], x[16], y[16].
+// The "ng" and "zr" output pins behave the same as in the regular ALU.
+// The "out" output is defined as follows:
+
+// If instruction[8]=1 and instruction[7]=1 the output is identical to the 
+// regular ALU, where:
+// instruction[5]=zx, instruction[4]=nx, ..., instruction[0]=no
+// Else, if instruction[8]=0 and instruction[7]=1, the output is a shift:
+// - If instruction[4] == 0, the input "y" will be shifted, otherwise "x".
+// - If instruction[5] == 0, the shift will be a right-shift, otherwise left.
+// - All other inputs are undefined.
+
+CHIP ExtendAlu {
+     IN x[16], y[16], instruction[9];
+     OUT out[16], zr, ng;
+     
+     PARTS:
+
+     //Regular ALU calculation:
+      ALU(x=x, y=y, 
+            zx=instruction[5], nx=instruction[4], 
+            zy=instruction[3], ny=instruction[2], 
+            f=instruction[1], no=instruction[0], 
+            out=ALUOut, zr=ALUzr, ng=ALUng);
+
+      //Calculate shifted left/right x and y
+      ShiftLeft(in=x,out=xShiftedLeft);
+      ShiftRight(in=x,out=xShiftedRight);
+      ShiftLeft(in=y,out=yShiftedLeft);
+      ShiftRight(in=y,out=yShiftedRight);
+      //Choose between shifted left/right, x/y
+      Mux4Way16(a=yShiftedRight, b=xShiftedRight, 
+                  c=yShiftedLeft, d=xShiftedLeft,
+                  sel=instruction[4..5],
+                  out[0..7]=shiftedPartA,out[8..15]=shiftedPartB, 
+                  out[0..15]=shifted, out[15]=shiftedMSB);
+     //Calculate the shifted x/y zr and ng bits:
+     And(a=shiftedMSB, b=true, out=shiftedNeg); //ng
+     //zr:
+     Or8Way(in=shiftedPartA, out=notZeroPartA);
+     Or8Way(in=shiftedPartB, out=notZeroPartB);
+     Or(a=notZeroPartA, b=notZeroPartB, out=shiftedNotZero);
+     Not(in=shiftedNotZero, out=shiftedZero);
+      //Decide whether output is regular ALU calculation, or a shift of x/y:
+      Mux16(a=shifted, b=ALUOut, sel=instruction[8], out=out);
+      Mux(a=shiftedZero, b=ALUzr, sel=instruction[8], out=zr);
+      Mux(a=shiftedNeg, b=ALUng, sel=instruction[8], out=ng);
+
+      
+
+
+     
+}

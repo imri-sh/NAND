@@ -1,0 +1,81 @@
+// This file is part of nand2tetris, as taught in The Hebrew University, and
+// was written by Aviv Yaish. It is an extension to the specifications given
+// [here](https://www.nand2tetris.org) (Shimon Schocken and Noam Nisan, 2017),
+// as allowed by the Creative Common Attribution-NonCommercial-ShareAlike 3.0
+// Unported [License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
+
+// This chip is an extension of the regular CPU that uses the extended ALU.
+// If instruction[15]==0 or (instruction[14]==1 and instruction[13]==1),
+// then CpuMul behaves exactly the same as the regular CPU.
+// If instruction[15]==1 and instruction[14]==0 the chip will behave as follows:
+// | Instruction           | 15 | 14 | 13 | a | c1 | c2 | c3 | c4 | c5 | c6 |
+// |-----------------------|:--:|:--:|:--:|:-:|:--:|:--:|:--:|:--:|:--:|:--:|
+// | Regular a-instruction |  0 |  * |  * | * |  * |  * |  * |  * |  * |  * |
+// | Regular c-instruction |  1 |  1 |  1 | * |  * |  * |  * |  * |  * |  * |
+// | dest=A<<;jump         |  1 |  0 |  1 | 0 |  1 |  0 |  0 |  0 |  0 |  0 |
+// | dest=D<<;jump         |  1 |  0 |  1 | 0 |  1 |  1 |  0 |  0 |  0 |  0 |
+// | dest=M<<;jump         |  1 |  0 |  1 | 1 |  1 |  0 |  0 |  0 |  0 |  0 |
+// | dest=A>>;jump         |  1 |  0 |  1 | 0 |  0 |  0 |  0 |  0 |  0 |  0 |
+// | dest=D>>;jump         |  1 |  0 |  1 | 0 |  0 |  1 |  0 |  0 |  0 |  0 |
+// | dest=M>>;jump         |  1 |  0 |  1 | 1 |  0 |  0 |  0 |  0 |  0 |  0 |
+// Where:
+// - "<<" is a left shift, and ">>" is a right shift, as defined in project 2.
+//   These notations were chosen because they are used in real programming
+//   languages.
+// - dest and jump can take the same values as in the regular CPU.
+
+CHIP CpuMul {
+    IN  
+        inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset=1) or continue executing
+                         // the current program (reset=0).
+    OUT 
+        outM[16],        // M value output
+        writeM,          // Write into M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+    
+    PARTS:
+    /*Mux to decide input to A register, depending on A-Instruction or C-Instruction.
+    If A-Instruction - we want to write the instruction (which is just the value assigned to A).
+    If C-Instruction - we're not writing the instruction to A (even though A might be written to,
+        depending on the most significat destination bit - instruction[5]):    */
+        Mux16(a=instruction, b=ALUOut, sel=instruction[15], out=inA);
+        //Write (load=1) to ARegister if A-instruction OR the A destination bit is on:
+        Not(in=instruction[15], out=aInstruction); //flip - as 0 means A instruction.
+        Or(a=aInstruction, b=instruction[5], out=writeA);
+        ARegister(in=inA, load=writeA, out=AOut, out[0..14]=addressM);
+        Mux16(a=AOut, b=inM, sel=instruction[12], out=y);
+    
+        //Write (load=1) to DRegister only if C-instruction AND the D destination bit is on:
+        And(a=instruction[15], b=instruction[4], out=writeD);
+        DRegister(in=ALUOut, load=writeD, out=x); //register D - outputs to ALU's x
+    
+        ExtendAlu(x=x, y=y, instruction=instruction[6..14],
+                    out=ALUOut, out=outM, zr=outEquals0, ng=outNegative);
+    
+        /*Function g(instruction[2..0], zr, ng).
+        g calculates whether to perform a jump (to the address stored in A.
+        It's the programmer's responsibility to ensure a valid address is already loaded into A).*/
+        Not(in=outEquals0, out=notEquals0);
+        Not(in=outNegative, out=notNegative);
+        //if j3=1, if ALUOutput>0, jump:
+        And(a=notNegative, b=notEquals0, out=outPositive);
+        And(a=instruction[0], b=outPositive, out=jumpPositive);
+        //if j2=1, if ALUOutput=0 - jump:
+        And(a=instruction[1], b=outEquals0, out=jumpZero);
+        //if j1=1, if ALUOutput<0 - jump:
+        And(a=instruction[2], b=outNegative, out=jumpNegative);
+        //3-way Or, to see if a jump condition has been met + an AND to confirm that it's a C-Instruction:
+        Or(a=jumpPositive, b=jumpZero, out=jumpPartOne);
+        Or(a=jumpPartOne, b=jumpNegative, out=jumpBit);
+        And(a=jumpBit, b=instruction[15], out=jump);
+        
+        ///Load=1 <==> jump condition met
+        PC(in=AOut, load=jump, inc=true, reset=reset, out[0..14]=pc); //load - depends on ALU output and instruction
+    
+        //Write to M if inM is a C-instruction AND the M destination bit is on:
+        And(a=instruction[3],b=instruction[15],out=writeM);
+}

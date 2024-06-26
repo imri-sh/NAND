@@ -1,0 +1,280 @@
+// This file is part of nand2tetris, as taught in The Hebrew University, and
+// was written by Aviv Yaish. It is an extension to the specifications given
+// [here](https://www.nand2tetris.org) (Shimon Schocken and Noam Nisan, 2017),
+// as allowed by the Creative Common Attribution-NonCommercial-ShareAlike 3.0
+// Unported [License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
+
+/**
+ * A library of functions for displaying graphics on the screen.
+ * The Hack physical screen consists of 256 rows (indexed 0..255, top to bottom)
+ * of 512 pixels each (indexed 0..511, left to right). The top left pixel on 
+ * the screen is indexed (0,0).
+ */
+class Screen {
+    static int screen_base;
+    static int screen_end;
+    static int mod_16;
+    static boolean color, color_black, color_white;
+    static bool black_line, white_line;
+    static Array powers_of_two;
+
+        /** Initializes the Screen. */
+        function void init() {
+            let powers_of_two = Array.new(16);
+            let powers_of_two[0] = 1;               //0000000000000001
+            let powers_of_two[1] = 2;               //0000000000000010
+            let powers_of_two[2] = 4;               //0000000000000100
+            let powers_of_two[3] = 8;               //0000000000001000
+            let powers_of_two[4] = 16;              //0000000000010000
+            let powers_of_two[5] = 32;              //0000000000100000
+            let powers_of_two[6] = 64;              //0000000001000000
+            let powers_of_two[7] = 128;             //0000000010000000
+            let powers_of_two[8] = 256;             //0000000100000000
+            let powers_of_two[9] = 512;             //0000001000000000
+            let powers_of_two[10] = 1024;           //0000010000000000
+            let powers_of_two[11] = 2048;           //0000100000000000
+            let powers_of_two[12] = 4096;           //0001000000000000
+            let powers_of_two[13] = 8192;           //0010000000000000
+            let powers_of_two[14] = 16384;          //0100000000000000
+            let powers_of_two[15] = 16384 + 16384;  //1000000000000000
+            
+            let color_black = true;
+            let color_white = false;
+            let color = color_black; //default color is black
+            let black_line = true;   //1111111111111111
+            let white_line = false;  //0000000000000000
+
+            let screen_base = 16384; // includes
+            let screen_end = 24576; // excludes
+            let mod_16 = 15; //000000001111
+            
+            return;
+        }
+
+        /** Erases the entire screen. */
+        function void clearScreen() {
+            var int i;
+
+            let i = screen_base;
+            while (i < screen_end){
+                do Memory.poke(i, 0);
+                let i = i + 1;
+            }
+            return;
+        }
+
+        /** Sets the current color, to be used for all subsequent drawXXX commands.
+         *    Black is represented by true, white by false. */
+        function void setColor(boolean b) {
+            let color = b;
+            return;
+        }
+
+        /** Draws the (x,y) pixel, using the current color. */
+        function void drawPixel(int x, int y) {
+            // For this function, you will need to calculate the value x%16.
+            // It should be calculated quickly without using multiplication or
+            // division, using exactly one basic math/logical operation.
+            // In addition, calculating 16384 + y * 32 + x/16 should not use
+            // division or multiplication.
+            // Pseudocode:
+            // 1. Compute the RAM address where the (x,y) pixel is
+            //    represented: 16384 + (32*y) + (x/16).
+            // 2. Use Memory.peek to get the 16-bit value of this address
+            // 3. Use some bitwise operation to set (only) the bit that corresponds
+            //    to the pixel to the current color.
+            // 4. Use Memory.poke to write the modified 16-bit value to the RAM
+            // address.
+
+            var int x_mod_16, screen_address, register_value, to_set, bit_setter;
+
+            let x_mod_16 = x & mod_16;
+            let bit_setter = powers_of_two[x_mod_16];
+            
+            let screen_address = screen_base + ^^^^^y + ####x;
+            let register_value = Memory.peek(screen_address);
+            
+            if(color){  //black
+                let to_set = register_value | bit_setter;
+            }
+            else{ //white
+                let bit_setter = ~bit_setter;
+                let to_set = register_value & bit_setter;
+            }
+            
+            do Memory.poke(screen_address, to_set);
+            return;
+        }
+
+        /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
+        function void drawLine(int x1, int y1, int x2, int y2) {
+            // The case where y1 == y2 can be implemented efficiently by
+            // trying to draw as many pixels as possible in a single assignment,
+            // similarly to Fill in project 4.
+            var int temp_x1, temp_y1;
+
+            if ( (x1 > x2)){  // reorient the points so that (x1,y1) is to the left of (x2,y2), aka  x1 < x2
+                let temp_x1 = x1;
+                let x1 = x2;
+                let x2 = temp_x1;
+                let temp_y1 = y1;
+                let y1 = y2;
+                let y2 = temp_y1;
+            }
+
+            if ( ~(x1 = x2) & ~(y1 = y2) ) {
+                do Screen.drawZigZag(x1, y1, x2, y2);
+                return;
+            }
+            if (y1 = y2){ //draw lines by inserting a filled line while possible
+                do Screen.fillLines(x1, y1, x2);
+                return;
+            }
+            if (x1 = x2){ //draw line pixel by pixel
+                if (y1 > y2){
+                    let temp_y1 = y1;
+                    let y1 = y2;
+                    let y2 = temp_y1;
+                }
+                while( ~(y1 > y2) ){
+                    do Screen.drawPixel(x1, y1);
+                    let y1 = y1 + 1;
+                }
+                return;
+            }
+            return;
+        }
+
+        function void fillLines(int x1, int y, int x2){
+            var int cur_address, end_address;
+            var int x1_reg, x2_reg;
+            var int filled_line, to_set, to_set_x1, to_set_x2, bit_setter, bit_setter_x1, bit_setter_x2;
+            var int register_value, register_value_x1, register_value_x2;
+
+            let x1_reg = screen_base + ^^^^^(y) + ####(x1);
+            let x2_reg = screen_base + ^^^^^(y) + ####(x2);            
+
+            //To color, we split by cases. First, if there are full registers to color:
+            let cur_address = x1_reg + 1;
+            let end_address = x2_reg;
+            if(color){ let filled_line = black_line;} //black line
+            else{ let filled_line = white_line; } //white line
+            while(cur_address < end_address){
+                do Memory.poke(cur_address, filled_line);
+                let cur_address = cur_address + 1;
+            }
+            // Now, we color the partial register:
+            let bit_setter_x1 = ~(powers_of_two[mod_16 & x1] - 1); //To turn on bits to the left(register-wise) of x1
+            if ( ~((mod_16 & x2)  = 15)){
+               let bit_setter_x2 = powers_of_two[(mod_16 & x2) + 1] - 1; //To turn on bits to the right(register-wise) of x2
+            }
+            else{ //x2 ends a register - need to color whole register
+                let bit_setter_x2 = -1; //1111111111111111
+            }
+
+            if (x1_reg = x2_reg){ //They share a register
+                let register_value = Memory.peek(x1_reg);
+                let bit_setter = bit_setter_x1 & bit_setter_x2; // Since they share a register
+                if(color){  //black
+                    let to_set = register_value | bit_setter;
+                }
+                else{ //white
+                    let bit_setter = ~bit_setter; //flip for white
+                    let to_set = register_value & bit_setter;
+                }
+                do Memory.poke(x1_reg, to_set);
+            }
+            else{ //They don't share a register - we need to color both of their partial registers
+                let register_value_x1 = Memory.peek(x1_reg);
+                let register_value_x2 = Memory.peek(x2_reg);
+                if(color){  //black
+                    let to_set_x1 = register_value_x1 | bit_setter_x1;
+                    let to_set_x2 = register_value_x2 | bit_setter_x2;
+                }
+                else{ //white
+                    let bit_setter_x1 = ~bit_setter_x1;
+                    let bit_setter_x2 = ~bit_setter_x2;
+                    let to_set_x1 = register_value_x1 & bit_setter_x1;
+                    let to_set_x2 = register_value_x2 & bit_setter_x2;
+                }
+                do Memory.poke(x1_reg, to_set_x1);
+                do Memory.poke(x2_reg, to_set_x2);
+            }
+
+            return;
+        }
+
+        /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
+        function void drawZigZag(int x1, int y1, int x2, int y2) {
+                        //Initialize:
+                        var int x, y, a, b, diff, dx, dy, b_step;
+                        let x = x1;
+                        let y = y1;
+                        let a = 0;
+                        let b = 0;
+                        let diff = 0;
+                        // compute dx, dy:
+                        let dx = x2 - x;
+                        let dy = y2 - y;
+
+                        if(y1 < y2){
+                            while( (a < dx) & (b < dy)   ){ //AND OR OR???????????
+                                do Screen.drawPixel(x+a, y+b);
+                                //Decide if we should go right or b:
+                                if (diff < 0) { //go right
+                                    let a = a + 1;
+                                    let diff = diff + dy;
+                                } else{ //go b
+                                    let b = b + 1;
+                                    let diff = diff - dx;
+                                }
+                            }
+                        }
+                        else{ //dy is now negative. a goes up, b goes down, as we're going from y2<y1 to y1.
+                              // mirror the algorith above:
+                            while( (a < dx) & (b < (-dy))   ){
+                                do Screen.drawPixel(x+a, y-b);
+                                if (diff < 0) {
+                                    let a = a + 1;
+                                    let diff = diff + (-dy);
+                                }
+                                else {
+                                    let b = b + 1;
+                                    let diff = diff - dx;
+                                }
+                            }
+                        }
+                        return;
+        }
+
+
+        /** Draws a filled rectangle whose top left corner is (x1, y1)
+         * and bottom right corner is (x2,y2), using the current color. */
+        function void drawRectangle(int x1, int y1, int x2, int y2) {
+            while(~(y1 > y2)){
+                do Screen.fillLines(x1, y1, x2);
+                let y1 = y1 + 1;
+            }
+            return;
+        }
+
+        /** Draws a filled circle of radius r<=181 around (x,y), using the current color. */
+        function void drawCircle(int x, int y, int r) {
+            // This can be implemented efficiently by drawing multiple lines at
+            // each iteration. You can use multiplication and sqrt.
+            // Pseudocode:
+            // 1. for (dy = -r ... r)
+            // 2.   let halfWidth = sqrt(r*r - dy*dy)
+            // 3.   do drawLine(x-halfWidth, y+dy, x+halfWidth, y+dy)
+            var int dy, half_width, r_squared;
+            let dy = -r;
+            let r_squared = r * r;
+
+            while ( ~(dy > r) ){
+                let half_width = Math.sqrt(r_squared - (dy*dy) );
+                do Screen.fillLines(x-half_width, y+dy, x+half_width);
+                let dy = dy + 1;
+            }
+            return;
+        }
+}
